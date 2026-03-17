@@ -1,7 +1,6 @@
 /**
  * MoveCar 多用户智能挪车系统 - v3.0
- * 优化：30分钟断点续传 + 域名优先级二维码 + 多用户隔离 + Webhook推送支持 + 个人挪车码入口
- * 修复：增强Webhook推送错误处理和调试功能
+ * 优化：30分钟断点续传 + 域名优先级二维码 + 多用户隔离 + 修复Webhook推送
  */
 
 addEventListener('fetch', event => {
@@ -57,7 +56,7 @@ async function handleRequest(request) {
 
 /** 新增：个人挪车码生成引导页 **/
 function renderSetupPage(origin) {
-  return new Response(`<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -338,7 +337,7 @@ function renderSetupPage(origin) {
     function printQR() {
       const qrUrl = document.getElementById('qrUrl').textContent;
       if (!qrUrl || qrUrl === '链接将在这里显示') {
-        alert('请先生成二维码');
+        alert('请先去生成二维码');
         return;
       }
       
@@ -352,7 +351,7 @@ function renderSetupPage(origin) {
     function copyLink() {
       const qrUrl = document.getElementById('qrUrl').textContent;
       if (!qrUrl || qrUrl === '链接将在这里显示') {
-        alert('请先生成二维码');
+        alert('请先去生成二维码');
         return;
       }
       
@@ -389,17 +388,20 @@ function renderSetupPage(origin) {
     });
   </script>
 </body>
-</html>`, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+</html>`;
+  
+  return new Response(html, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 }
 
 /** 新增：调试信息页面 **/
 function renderDebugPage(origin, userKey) {
   const webhookUrl = getUserConfig(userKey, 'WEBHOOK_URL');
+  const webhookToken = getUserConfig(userKey, 'WEBHOOK_TOKEN') || '779486149';
   const ppToken = getUserConfig(userKey, 'PUSHPLUS_TOKEN');
   const barkUrl = getUserConfig(userKey, 'BARK_URL');
   const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
   
-  return new Response(`<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -433,7 +435,7 @@ function renderDebugPage(origin, userKey) {
 <body>
   <div class="debug-container">
     <h1>🚗 挪车系统调试信息</h1>
-    <p style="color: #64748b; margin-bottom: 30px;">版本 v2.4 | 用户: ${userKey}</p>
+    <p style="color: #fff; margin-bottom: 30px;">版本 v3.0 | 用户: ${userKey}</p>
     
     <div class="debug-card">
       <h2>📊 当前用户配置</h2>
@@ -445,6 +447,11 @@ function renderDebugPage(origin, userKey) {
         <strong>Webhook URL:</strong> 
         ${webhookUrl ? webhookUrl : '<span class="status error">未配置</span>'}
         ${webhookUrl ? '<span class="status success">已配置</span>' : ''}
+      </div>
+      <div class="config-item">
+        <strong>Webhook Token:</strong> 
+        ${webhookToken ? '***' + webhookToken.slice(-4) : '<span class="status error">未配置</span>'}
+        ${webhookToken ? '<span class="status success">已配置</span>' : ''}
       </div>
       <div class="config-item">
         <strong>PushPlus Token:</strong> 
@@ -501,11 +508,17 @@ function renderDebugPage(origin, userKey) {
           </ul>
         </li>
         <li><strong>环境变量格式</strong>：
-          <pre style="font-size: 12px;">WEBHOOK_URL = https://msg.yormb.cn/wxsend
-WEBHOOK_URL_SLEPOH = https://msg.yormb.cn/wxsend
+          <pre style="font-size: 12px;"># Webhook推送配置 (适配WXPush)
+WEBHOOK_URL = https://<您的Worker地址>/你的token
+WEBHOOK_TOKEN = 你的token
+# 或者使用 /wxsend 端点
+# WEBHOOK_URL = https://<您的Worker地址>/wxsend
+# WEBHOOK_TOKEN = 你的token
+
+# 其他推送通道
 PUSHPLUS_TOKEN = 您的PushPlus Token
 BARK_URL = https://api.day.app/您的Bark密钥
-CAR_TITLE = 车主姓名
+CAR_TITLE = 车主姓名（全平台显示）
 PHONE_NUMBER = 联系电话</pre>
         </li>
       </ol>
@@ -517,6 +530,75 @@ PHONE_NUMBER = 联系电话</pre>
       showResultPanel('🔌 正在测试Webhook推送...', 'log-info');
       
       try {
+        // 先测试手动配置
+        addLog('🔧 检查Webhook配置...', 'log-info');
+        const webhookUrl = "${webhookUrl}";
+        const webhookToken = "${webhookToken}";
+        
+        if (!webhookUrl) {
+          addLog('❌ 未检测到WEBHOOK_URL环境变量配置', 'log-error');
+          addLog('请在Cloudflare Workers中设置WEBHOOK_URL环境变量', 'log-info');
+          addLog('推荐配置: WEBHOOK_URL = https://<您的Worker地址>/你的token', 'log-info');
+          return;
+        }
+        
+        if (!webhookToken) {
+          addLog('⚠️ 未检测到WEBHOOK_TOKEN环境变量，使用默认值779486149', 'log-warning');
+        }
+        
+        addLog(\`🔧 Webhook URL: \${webhookUrl}\`, 'log-info');
+        addLog(\`🔧 Webhook Token: \${webhookToken ? '***' + webhookToken.slice(-4) : '未配置'}\`, 'log-info');
+        
+        // 测试直接访问WXPush页面
+        addLog('🔧 测试WXPush服务可访问性...', 'log-info');
+        
+        const testWXPush = async (testUrl, description) => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const response = await fetch(testUrl, { 
+              method: 'GET',
+              signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+              const contentType = response.headers.get('content-type') || '';
+              if (contentType.includes('text/html')) {
+                addLog(\`✅ \${description}: 可访问 (返回HTML页面)\`, 'log-success');
+                return true;
+              } else if (contentType.includes('application/json')) {
+                addLog(\`✅ \${description}: 可访问 (返回JSON)\`, 'log-success');
+                return true;
+              } else {
+                addLog(\`✅ \${description}: 可访问 (状态: \${response.status})\`, 'log-success');
+                return true;
+              }
+            } else {
+              addLog(\`⚠️ \${description}: 返回状态 \${response.status}\`, 'log-warning');
+              return false;
+            }
+          } catch (error) {
+            addLog(\`❌ \${description}: \${error.message}\`, 'log-error');
+            return false;
+          }
+        };
+        
+        // 测试推荐的URL格式
+        const recommendedUrl = 'https://<您的Worker地址>/你的token';
+        const wxsendUrl = 'https://<您的Worker地址>/wxsend';
+        const rootUrl = 'https://<您的Worker地址>/';
+        
+        addLog('🔧 测试WXPush服务状态...', 'log-info');
+        await testWXPush(recommendedUrl, '推荐格式 (Token路径)');
+        await testWXPush(wxsendUrl, '/wxsend端点');
+        await testWXPush(rootUrl, '根路径');
+        
+        // 执行实际的挪车系统测试
+        addLog('🚀 开始执行挪车系统Webhook测试...', 'log-info');
+        
         const response = await fetch('/api/notify?u=' + "${userKey}", {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -536,12 +618,21 @@ PHONE_NUMBER = 联系电话</pre>
             addLog('✅ Webhook通道: 推送成功', 'log-success');
           } else {
             addLog('⚠️ Webhook通道: 推送失败或未启用', 'log-warning');
+            addLog('可能原因:', 'log-info');
+            addLog('1. Webhook URL配置错误', 'log-info');
+            addLog('2. Token验证失败', 'log-info');
+            addLog('3. WXPush服务内部错误', 'log-info');
+            addLog('4. 请求格式不符合WXPush要求', 'log-info');
           }
         } else {
           addLog('❌ Webhook推送测试失败: ' + (data.error || '未知错误'), 'log-error');
         }
       } catch(error) {
         addLog('❌ 网络请求失败: ' + error.message, 'log-error');
+        addLog('请检查:', 'log-info');
+        addLog('1. 浏览器控制台是否有CORS错误', 'log-info');
+        addLog('2. 网络连接是否正常', 'log-info');
+        addLog('3. Cloudflare Workers是否正常运行', 'log-info');
       }
     }
     
@@ -686,7 +777,9 @@ PHONE_NUMBER = 联系电话</pre>
     });
   </script>
 </body>
-</html>`, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+</html>`;
+  
+  return new Response(html, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 }
 
 /** 配置读取 **/
@@ -732,7 +825,134 @@ function generateMapUrls(lat, lng) {
   };
 }
 
-/** 发送通知逻辑 - 包含Webhook推送支持 **/
+/** 新增：专门处理WXPush Webhook请求的函数 - 修复版本 **/
+async function sendWXPushWebhook(webhookUrl, token, data) {
+  try {
+    console.log(`🔌 [sendWXPushWebhook] 开始发送Webhook请求`);
+    console.log(`🔌 原始Webhook URL: ${webhookUrl}`);
+    console.log(`🔌 使用Token: ${token}`);
+    console.log(`🔌 请求数据: ${JSON.stringify(data)}`);
+    
+    // 验证输入参数
+    if (!webhookUrl) {
+      throw new Error('Webhook URL未配置');
+    }
+    if (!token) {
+      throw new Error('Webhook Token未配置');
+    }
+    
+    // 尝试不同的URL格式
+    const testUrls = [];
+    
+    // 方法1: 直接使用token路径 (推荐格式)
+    try {
+      const urlObj1 = new URL(webhookUrl);
+      if (urlObj1.pathname === '/' || urlObj1.pathname === '' || urlObj1.pathname === '/wxsend') {
+        urlObj1.pathname = `/${token}`;
+        testUrls.push({
+          url: urlObj1.toString(),
+          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          description: 'Token路径格式'
+        });
+      }
+    } catch (e) {
+      console.log(`⚠️ 无法解析URL: ${webhookUrl}`);
+    }
+    
+    // 方法2: 使用/wxsend端点 + Authorization头部
+    try {
+      const urlObj2 = new URL(webhookUrl);
+      if (!urlObj2.pathname.endsWith('/wxsend')) {
+        // 如果原始URL不是/wxsend，添加/wxsend路径
+        urlObj2.pathname = '/wxsend';
+      }
+      testUrls.push({
+        url: urlObj2.toString(),
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": token
+        },
+        method: 'POST',
+        description: '/wxsend端点 + Authorization头部'
+      });
+    } catch (e) {
+      console.log(`⚠️ 无法构造/wxsend URL: ${webhookUrl}`);
+    }
+    
+    // 方法3: 原始URL格式
+    testUrls.push({
+      url: webhookUrl,
+      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      description: '原始URL格式'
+    });
+    
+    console.log(`🔌 将尝试以下URL格式:`, testUrls.map(t => ({ url: t.url, description: t.description })));
+    
+    // 按顺序尝试不同的URL格式
+    let lastError = null;
+    for (let i = 0; i < testUrls.length; i++) {
+      const testConfig = testUrls[i];
+      console.log(`🔌 尝试第${i+1}种方法: ${testConfig.description}`);
+      console.log(`🔌 请求URL: ${testConfig.url}`);
+      console.log(`🔌 请求头: ${JSON.stringify(testConfig.headers)}`);
+      
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+        
+        const response = await fetch(testConfig.url, {
+          method: testConfig.method,
+          headers: testConfig.headers,
+          body: JSON.stringify(data),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        console.log(`🔌 响应状态: ${response.status} ${response.statusText}`);
+        
+        const responseText = await response.text();
+        console.log(`🔌 响应内容: ${responseText.substring(0, 500)}`);
+        
+        if (response.ok) {
+          console.log(`✅ 第${i+1}种方法成功: ${testConfig.description}`);
+          return response;
+        } else {
+          console.log(`⚠️ 第${i+1}种方法失败: HTTP ${response.status}`);
+          lastError = new Error(`HTTP ${response.status}: ${responseText.substring(0, 200)}`);
+        }
+      } catch (error) {
+        console.error(`❌ 第${i+1}种方法异常:`, error.message);
+        lastError = error;
+      }
+    }
+    
+    // 所有方法都失败
+    throw lastError || new Error('所有Webhook请求方法都失败');
+    
+  } catch (error) {
+    console.error('❌ 发送WXPush请求失败:', error.message);
+    
+    // 提供更详细的错误信息
+    if (error.name === 'TypeError') {
+      console.error('❌ 网络连接失败，可能原因:');
+      console.error('   - Webhook URL不可访问');
+      console.error('   - CORS策略限制');
+      console.error('   - 目标服务器无响应');
+      console.error('   - DNS解析失败');
+    } else if (error.name === 'AbortError') {
+      console.error('❌ 请求超时，可能原因:');
+      console.error('   - 服务器响应太慢');
+      console.error('   - 网络连接不稳定');
+    }
+    
+    throw error;
+  }
+}
+
+/** 发送通知逻辑 - 修复Webhook推送问题 **/
 async function handleNotify(request, url, userKey) {
   try {
     if (typeof MOVE_CAR_STATUS === 'undefined') throw new Error('KV 未绑定');
@@ -746,6 +966,7 @@ async function handleNotify(request, url, userKey) {
     const ppToken = getUserConfig(userKey, 'PUSHPLUS_TOKEN');
     const barkUrl = getUserConfig(userKey, 'BARK_URL');
     const webhookUrl = getUserConfig(userKey, 'WEBHOOK_URL');
+    const webhookToken = getUserConfig(userKey, 'WEBHOOK_TOKEN') || '你的token';
     const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
     const baseDomain = (typeof globalThis.EXTERNAL_URL !== 'undefined' && globalThis.EXTERNAL_URL) ? globalThis.EXTERNAL_URL.replace(/\/$/, "") : url.origin;
     const confirmUrl = baseDomain + "/owner-confirm?u=" + userKey;
@@ -816,69 +1037,59 @@ async function handleNotify(request, url, userKey) {
       console.log('ℹ️ 未配置Bark URL，跳过推送');
     }
     
-    // 3. 新增 Webhook 推送通道
+    // 3. 修复的 Webhook 推送通道 - 适配WXPush
     if (webhookUrl) {
       console.log(`🔌 尝试发送Webhook到: ${webhookUrl}`);
-      console.log(`🔌 Webhook请求头: Authorization=779486149, Content-Type=application/json`);
       
+      // 根据WXPush文档修复请求格式
       const webhookData = {
-        "title": "🚗 挪车请求：" + carTitle,
-        "content": notifyText.replace(/\\\\n/g, '\\n') + "\\n\\n处理链接：" + confirmUrl
+        title: "🚗 挪车请求：" + carTitle,
+        content: notifyText.replace(/\\\\n/g, '\\n') + "\\n\\n处理链接：" + confirmUrl
       };
       
       console.log(`🔌 Webhook请求体: ${JSON.stringify(webhookData)}`);
       
-      const webhookTask = fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          "Authorization": "779486149",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(webhookData)
-      }).then(async response => {
-        console.log(`🔌 Webhook响应状态: ${response.status} ${response.statusText}`);
-        
-        try {
-          const responseText = await response.text();
-          console.log(`🔌 Webhook响应内容: ${responseText.substring(0, 500)}`);
+      // 修复Webhook发送逻辑
+      const webhookTask = sendWXPushWebhook(webhookUrl, webhookToken, webhookData)
+        .then(async (response) => {
+          console.log(`🔌 Webhook响应状态: ${response.status} ${response.statusText}`);
           
-          if (response.ok) {
-            pushResults.webhook = true;
-            console.log('✅ Webhook推送成功');
+          try {
+            const responseText = await response.text();
+            console.log(`🔌 Webhook响应内容: ${responseText.substring(0, 500)}`);
             
-            // 尝试解析JSON响应
-            try {
-              const jsonData = JSON.parse(responseText);
-              console.log('🔌 Webhook返回的JSON:', JSON.stringify(jsonData).substring(0, 300));
-            } catch(e) {
-              console.log('🔌 Webhook返回非JSON格式');
+            if (response.ok) {
+              pushResults.webhook = true;
+              console.log('✅ Webhook推送成功');
+              
+              // 尝试解析JSON响应
+              try {
+                const jsonData = JSON.parse(responseText);
+                console.log('🔌 Webhook返回的JSON:', JSON.stringify(jsonData).substring(0, 300));
+                return jsonData;
+              } catch(e) {
+                console.log('🔌 Webhook返回非JSON格式');
+                return { text: responseText };
+              }
+            } else {
+              console.error(`❌ Webhook推送失败: ${response.status}`);
+              console.error(`❌ 响应内容: ${responseText.substring(0, 300)}`);
+              return { error: `HTTP ${response.status}`, text: responseText };
             }
-          } else {
-            console.error(`❌ Webhook推送失败: ${response.status}`);
-            console.error(`❌ 响应内容: ${responseText.substring(0, 300)}`);
+          } catch(e) {
+            console.error('❌ 读取Webhook响应失败:', e.message);
+            return { error: e.message };
           }
-        } catch(e) {
-          console.error('❌ 读取Webhook响应失败:', e.message);
-        }
-        
-        return response;
-      }).catch(error => {
-        console.error('❌ Webhook推送异常:', error.message);
-        console.error('❌ 错误详情:', error.stack);
-        
-        // 网络错误时尝试诊断
-        if (error.name === 'TypeError') {
-          console.error('❌ 网络连接失败，可能原因:');
-          console.error('   - Webhook URL不可访问');
-          console.error('   - CORS策略限制');
-          console.error('   - 目标服务器无响应');
-        }
-      });
+        }).catch(error => {
+          console.error('❌ Webhook推送异常:', error.message);
+          console.error('❌ 错误详情:', error.stack);
+          return { error: error.message };
+        });
+      
       tasks.push(webhookTask);
     } else {
       console.log('⚠️ 未配置Webhook URL，跳过推送');
       console.log(`ℹ️ 检查环境变量: WEBHOOK_URL = ${getUserConfig(userKey, 'WEBHOOK_URL')}`);
-      console.log(`ℹ️ 检查环境变量: WEBHOOK_URL_${userKey.toUpperCase()} = ${getUserConfig(userKey, 'WEBHOOK_URL')}`);
     }
 
     // 等待所有推送完成
@@ -952,7 +1163,8 @@ function renderQRPage(origin, userKey) {
   const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
   let baseDomain = (typeof globalThis.EXTERNAL_URL !== 'undefined' && globalThis.EXTERNAL_URL) ? globalThis.EXTERNAL_URL.replace(/\/$/, "") : origin;
   const targetUrl = baseDomain + "/?u=" + userKey;
-  return new Response(`<!DOCTYPE html>
+  
+  const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -975,7 +1187,9 @@ function renderQRPage(origin, userKey) {
     <div class="url-info">${targetUrl}</div>
   </div>
 </body>
-</html>`, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+</html>`;
+  
+  return new Response(html, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 }
 
 /** 界面渲染：扫码者页 **/
@@ -984,7 +1198,7 @@ function renderMainPage(origin, userKey) {
   const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
   const phoneHtml = phone ? '<a href="tel:' + phone + '" class="btn-phone">📞 拨打车主电话</a>' : '';
 
-  return new Response(`<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -1130,13 +1344,16 @@ function renderMainPage(origin, userKey) {
     }
   </script>
 </body>
-</html>`, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+</html>`;
+  
+  return new Response(html, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 }
 
 /** 界面渲染：车主页 **/
 function renderOwnerPage(userKey) {
   const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
-  return new Response(`<!DOCTYPE html>
+  
+  const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -1186,5 +1403,7 @@ function renderOwnerPage(userKey) {
     }
   </script>
 </body>
-</html>`, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+</html>`;
+  
+  return new Response(html, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 }
