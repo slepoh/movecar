@@ -131,7 +131,7 @@
 - `CAR_TITLE_XIAOWANG`：显示的车辆/车主信息（如：粤B·88888）。
 - `EXTERNAL_URL`：填入你的反代备案域名（例如 https://xx.xxx.com）-（可选，注意：带上https，末尾不要带斜杠)
 - `PHONE_NUMBER_XIAOWANG`：该车主的备用电话-通知车主后没有回应的时候可以直接拨打电话（可选）。
-- `WEBHOOK_URL`：Webhook配置地址
+- `WEBHOOK_URL`：自定义Webhook配置地址（推荐使用wxpush [🔗 基于 Workers & Pages ](https://github.com/frankiejun/wxpush)）
 - `WEBHOOK_URL_专属ID`：为特定用户设定专属Webhook通道
 - `CAR_TITLE_专属ID`：为特定用户设定专属车牌号（可在挪车通知页面显示）
 
