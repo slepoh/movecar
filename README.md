@@ -124,13 +124,16 @@
 - `BARK_URL`：默认推送地址。
 - `PUSHPLUS_TOKEN`：默认微信令牌。
 
-#### 2. 用户专属变量 (强烈推荐)-PUSHPLUS和Bark看需求选一个或者都配置也行。
+#### 2. 用户专属变量 (强烈推荐)-PUSHPLUS、Bark和Webhook看需求选一个或者都配置也行。
 **格式：`变量名_用户ID` (ID需大写)**。例如你的 ID 是 `xiaowang`：
 - `PUSHPLUS_TOKEN_XIAOWANG`：该用户的专属令牌。
 - `BARK_URL_XIAOWANG`：https://api.day.app/xxxxxxxxxxxxxxxxxxxxxx（用户自己的Bark推送链接，并且末尾不能带 / 斜杠，不用苹果手机的可以不用添加这个变量）。
 - `CAR_TITLE_XIAOWANG`：显示的车辆/车主信息（如：粤B·88888）。
 - `EXTERNAL_URL`：填入你的反代备案域名（例如 https://xx.xxx.com）-（可选，注意：带上https，末尾不要带斜杠)
 - `PHONE_NUMBER_XIAOWANG`：该车主的备用电话-通知车主后没有回应的时候可以直接拨打电话（可选）。
+- `WEBHOOK_URL`：Webhook配置地址
+- `WEBHOOK_URL_专属ID`：为特定用户设定专属Webhook通道
+- `CAR_TITLE_专属ID`：为特定用户设定专属车牌号（可在挪车通知页面显示）
 
 ### 第五步：绑定域名 (可选)
 在「Settings」 -> 「Domains & Routes」中绑定你的自定义域名。
