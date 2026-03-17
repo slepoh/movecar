@@ -1,12 +1,12 @@
-# MoveCar - 多用户智能挪车系统 (v2.0)
+# MoveCar - 多用户智能挪车系统 (v3.0)
 
-基于 Cloudflare Workers 的智能挪车通知系统，扫码即可通知车主，保护双方隐私。**v2.0 版本现已支持单实例多用户并发使用。**
+基于 Cloudflare Workers 的智能挪车通知系统，扫码即可通知车主，保护双方隐私。**v3.0 版本现已支持单实例多用户并发使用。**
 
 ## 🌐 界面预览
 
 | 请求者页面 | 车主页面 |
 |:---:|:---:|
-| [🔗 在线预览](https://htmlpreview.github.io/?https://github.com/lesnolie/movecar/blob/main/preview-requester.html) | [🔗 在线预览](https://htmlpreview.github.io/?https://github.com/lesnolie/movecar/blob/main/preview-owner.html) |
+| [🔗 在线预览](https://htmlpreview.github.io/?https://github.com/slepoh/movecar/blob/main/preview-requester.html) | [🔗 在线预览](https://htmlpreview.github.io/?https://github.com/slepoh/movecar/blob/main/preview-owner.html) |
 
 ---
 
@@ -37,6 +37,14 @@
 - 零门槛，只需微信扫码关注即可接收通知。
 - 支持 HTML 格式，点击通知即可直接跳转到确认处理页面。
 
+### Webhook  (自定义通道)
+- 推荐使用 [🔗 基于 Workers & Pages ](https://github.com/frankiejun/wxpush)
+- 免费，每天 10 万次额度。
+- 微信原生弹窗 + 声音提醒
+- 支持多用户，跳转稳定
+- 支持 HTML 格式，点击通知即可直接跳转到确认处理页面。
+- 支持更换皮肤
+
 ---
 
 ## 🔄 使用流程
@@ -56,7 +64,7 @@
 
 ## 📝 更新日志
 
-### (2026-02-27) —— 智能链路与会话持久化升级
+### (2026-03-17) —— 智能链路与会话持久化升级
 
 #### 🚀 核心新特性
 
